@@ -1,0 +1,10 @@
+{
+  "BLOXZEBBRAZZYT": {
+    "password": "1234",
+    "admin": true
+  },
+  "alex": {
+    "password": "test",
+    "admin": false
+  }
+}
