@@ -3,7 +3,7 @@ const app = express();
 const http = require("http").createServer(app);
 const io = require("socket.io")(http);
 
-const users = {}; // username -> password
+const users = {}; 
 const onlineUsers = new Set();
 
 function isValidName(name) {
@@ -21,18 +21,21 @@ function isValidName(name) {
 
 app.get("/", (req, res) => {
   res.send(`
-  <h2>Login Chat</h2>
+  <h2>Chat App</h2>
 
   <div id="auth">
     <input id="user" placeholder="Username">
     <input id="pass" placeholder="Password">
-    <button onclick="register()">Register</button>
+
+    <button onclick="signup()">Sign up</button>
     <button onclick="login()">Login</button>
+
     <p id="msg"></p>
   </div>
 
   <div id="chatBox" style="display:none;">
     <div id="chat"></div>
+
     <input id="text" placeholder="Message">
     <button onclick="send()">Send</button>
   </div>
@@ -42,12 +45,12 @@ app.get("/", (req, res) => {
     const socket = io();
     let currentUser = "";
 
-    function register() {
-      socket.emit("register", {
+    function signup() {
+      socket.emit("signup", {
         user: user.value,
         pass: pass.value
       }, res => {
-        msg.innerText = res.ok ? "Created!" : res.error;
+        msg.innerText = res.ok ? "Account created!" : res.error;
       });
     }
 
@@ -88,25 +91,27 @@ app.get("/", (req, res) => {
   `);
 });
 
-// 🔐 REGISTER + LOGIN
+// 🔐 SERVER LOGIC
 io.on("connection", (socket) => {
 
-  socket.on("register", (data, cb) => {
+  // SIGN UP
+  socket.on("signup", (data, cb) => {
     if (!isValidName(data.user)) {
       return cb({ ok: false, error: "Invalid username" });
     }
 
     if (users[data.user]) {
-      return cb({ ok: false, error: "Username exists" });
+      return cb({ ok: false, error: "Username already exists" });
     }
 
     users[data.user] = data.pass;
     cb({ ok: true });
   });
 
+  // LOGIN
   socket.on("login", (data, cb) => {
     if (!users[data.user]) {
-      return cb({ ok: false, error: "No account" });
+      return cb({ ok: false, error: "Account not found" });
     }
 
     if (users[data.user] !== data.pass) {
@@ -123,8 +128,9 @@ io.on("connection", (socket) => {
     cb({ ok: true });
   });
 
+  // CHAT
   socket.on("msg", (data) => {
-    if (!data.msg.trim()) return;
+    if (!data.msg || !data.msg.trim()) return;
 
     io.emit("msg", data);
   });
