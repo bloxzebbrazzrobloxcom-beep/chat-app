@@ -2,30 +2,26 @@ const express = require("express");
 const app = express();
 const http = require("http").createServer(app);
 const io = require("socket.io")(http);
+const fs = require("fs");
 
-// 👑 OWNER
-const OWNER_NAME = "BLOXZEBBRAZZYT";
+// 📂 Ladda filer
+let users = {};
+let admins = {};
 
-// 💾 memory storage
-const users = {};
-const onlineUsers = new Set();
-
-// 🚫 namn-regler
-function isValidName(name) {
-  if (!name) return false;
-
-  const lower = name.toLowerCase();
-
-  // 👑 OWNER bypass
-  if (name === OWNER_NAME) return true;
-
-  if (lower.includes("bloxzebbrazz")) return false;
-  if (lower.includes("zebbrazz")) return false;
-
-  return true;
+if (fs.existsSync("users.json")) {
+  users = JSON.parse(fs.readFileSync("users.json"));
 }
 
-// 🌐 frontend
+if (fs.existsSync("admins.json")) {
+  admins = JSON.parse(fs.readFileSync("admins.json"));
+}
+
+// 💾 spara users
+function saveUsers() {
+  fs.writeFileSync("users.json", JSON.stringify(users, null, 2));
+}
+
+// 🌐 FRONTEND
 app.get("/", (req, res) => {
   res.send(`
   <h2>Chat App</h2>
@@ -50,28 +46,26 @@ app.get("/", (req, res) => {
   <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io();
-    let currentUser = "";
 
     function signup() {
-      socket.emit("signup", {
-        user: user.value,
-        pass: pass.value
-      }, res => {
-        msg.innerText = res.message;
+      const user = document.getElementById("user").value;
+      const pass = document.getElementById("pass").value;
+
+      socket.emit("signup", { user, pass }, (res) => {
+        document.getElementById("msg").innerText = res.message;
       });
     }
 
     function login() {
-      socket.emit("login", {
-        user: user.value,
-        pass: pass.value
-      }, res => {
+      const user = document.getElementById("user").value;
+      const pass = document.getElementById("pass").value;
+
+      socket.emit("login", { user, pass }, (res) => {
         if (!res.ok) {
-          msg.innerText = res.message;
+          document.getElementById("msg").innerText = res.message;
           return;
         }
 
-        currentUser = user.value;
         document.getElementById("auth").style.display = "none";
         document.getElementById("chatBox").style.display = "block";
       });
@@ -87,61 +81,72 @@ app.get("/", (req, res) => {
 
       if (!text.trim()) return;
 
-      socket.emit("msg", {
-        user: currentUser,
-        msg: text
-      });
-
+      socket.emit("msg", { msg: text });
       document.getElementById("text").value = "";
     }
   </script>
   `);
 });
 
-// 🔐 SERVER LOGIC
+// 🔐 SERVER
 io.on("connection", (socket) => {
 
-  // SIGN UP
+  // 📝 SIGN UP
   socket.on("signup", (data, cb) => {
-    if (!isValidName(data.user)) {
-      return cb({ ok: false, message: "Invalid username" });
+    const user = data.user;
+    const pass = data.pass;
+
+    if (!user || !pass) {
+      return cb({ ok: false, message: "Fill all fields" });
     }
 
-    if (users[data.user]) {
+    if (users[user] || admins[user]) {
       return cb({ ok: false, message: "Username already exists" });
     }
 
-    users[data.user] = data.pass;
+    users[user] = { password: pass };
+    saveUsers();
 
     return cb({ ok: true, message: "Account created!" });
   });
 
-  // LOGIN
+  // 🔐 LOGIN
   socket.on("login", (data, cb) => {
-    if (!users[data.user]) {
-      return cb({ ok: false, message: "Account not found" });
+
+    // 👑 ADMIN
+    if (admins[data.user]) {
+      if (admins[data.user].password !== data.pass) {
+        return cb({ ok: false, message: "Wrong password" });
+      }
+
+      socket.user = data.user;
+      socket.admin = true;
+
+      return cb({ ok: true, message: "Admin login!" });
     }
 
-    if (users[data.user] !== data.pass) {
-      return cb({ ok: false, message: "Wrong password" });
+    // 👤 USER
+    if (users[data.user]) {
+      if (users[data.user].password !== data.pass) {
+        return cb({ ok: false, message: "Wrong password" });
+      }
+
+      socket.user = data.user;
+      socket.admin = false;
+
+      return cb({ ok: true, message: "Logged in!" });
     }
 
-    if (onlineUsers.has(data.user)) {
-      return cb({ ok: false, message: "Already online" });
-    }
-
-    onlineUsers.add(data.user);
-    socket.user = data.user;
-
-    return cb({ ok: true, message: "Logged in!" });
+    return cb({ ok: false, message: "Account not found" });
   });
 
   // 💬 CHAT
   socket.on("msg", (data) => {
+    if (!socket.user) return;
     if (!data.msg || !data.msg.trim()) return;
 
     io.emit("msg", {
-      user: data.user === OWNER_NAME ? "👑 " + data.user : data.user,
+      user: socket.admin ? "👑 " + socket.user : socket.user,
       msg: data.msg
     });
   });
