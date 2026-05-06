@@ -3,7 +3,7 @@ const app = express();
 const http = require("http").createServer(app);
 const io = require("socket.io")(http);
 
-const users = {}; 
+const users = {};
 const onlineUsers = new Set();
 
 function isValidName(name) {
@@ -46,25 +46,25 @@ app.get("/", (req, res) => {
     let currentUser = "";
 
     function signup() {
-      socket.emit("signup", {
-        user: user.value,
-        pass: pass.value
-      }, res => {
-        msg.innerText = res.ok ? "Account created!" : res.error;
+      const user = document.getElementById("user").value;
+      const pass = document.getElementById("pass").value;
+
+      socket.emit("signup", { user, pass }, (res) => {
+        document.getElementById("msg").innerText = res.message;
       });
     }
 
     function login() {
-      socket.emit("login", {
-        user: user.value,
-        pass: pass.value
-      }, res => {
+      const user = document.getElementById("user").value;
+      const pass = document.getElementById("pass").value;
+
+      socket.emit("login", { user, pass }, (res) => {
         if (!res.ok) {
-          msg.innerText = res.error;
+          document.getElementById("msg").innerText = res.message;
           return;
         }
 
-        currentUser = user.value;
+        currentUser = user;
         document.getElementById("auth").style.display = "none";
         document.getElementById("chatBox").style.display = "block";
       });
@@ -91,44 +91,46 @@ app.get("/", (req, res) => {
   `);
 });
 
-// 🔐 SERVER LOGIC
+// 🔐 SERVER
 io.on("connection", (socket) => {
 
-  // SIGN UP
   socket.on("signup", (data, cb) => {
     if (!isValidName(data.user)) {
-      return cb({ ok: false, error: "Invalid username" });
+      return cb({ ok: false, message: "Invalid username" });
     }
 
     if (users[data.user]) {
-      return cb({ ok: false, error: "Username already exists" });
+      return cb({ ok: false, message: "Username already exists" });
+    }
+
+    if (!data.user || !data.pass) {
+      return cb({ ok: false, message: "Fill in all fields" });
     }
 
     users[data.user] = data.pass;
-    cb({ ok: true });
+
+    return cb({ ok: true, message: "Account created!" });
   });
 
-  // LOGIN
   socket.on("login", (data, cb) => {
     if (!users[data.user]) {
-      return cb({ ok: false, error: "Account not found" });
+      return cb({ ok: false, message: "Account not found" });
     }
 
     if (users[data.user] !== data.pass) {
-      return cb({ ok: false, error: "Wrong password" });
+      return cb({ ok: false, message: "Wrong password" });
     }
 
     if (onlineUsers.has(data.user)) {
-      return cb({ ok: false, error: "Already online" });
+      return cb({ ok: false, message: "Already online" });
     }
 
     onlineUsers.add(data.user);
     socket.user = data.user;
 
-    cb({ ok: true });
+    return cb({ ok: true, message: "Logged in!" });
   });
 
-  // CHAT
   socket.on("msg", (data) => {
     if (!data.msg || !data.msg.trim()) return;
 
