@@ -3,19 +3,17 @@ const app = express();
 const http = require("http").createServer(app);
 const io = require("socket.io")(http);
 
-// 🧠 lagring i minnet (enkelt system)
-const users = new Set();
+const users = {}; // username -> password
+const onlineUsers = new Set();
 
 function isValidName(name) {
   if (!name) return false;
 
   const lower = name.toLowerCase();
 
-  // 👑 admin exception
   if (name === "BLOXZEBBRAZZYT") return true;
 
-  // 🚫 förbjudna basnamn
-  if (lower.includes("bloxzebbrazz") && name !== "BLOXZEBBRAZZYT") return false;
+  if (lower.includes("bloxzebbrazz")) return false;
   if (lower.includes("zebbrazz")) return false;
 
   return true;
@@ -23,79 +21,110 @@ function isValidName(name) {
 
 app.get("/", (req, res) => {
   res.send(`
-  <h2>Chat App</h2>
+  <h2>Login Chat</h2>
 
-  <div id="login">
-    <input id="username" placeholder="Skapa username">
-    <button onclick="join()">Join</button>
-    <p id="error"></p>
+  <div id="auth">
+    <input id="user" placeholder="Username">
+    <input id="pass" placeholder="Password">
+    <button onclick="register()">Register</button>
+    <button onclick="login()">Login</button>
+    <p id="msg"></p>
   </div>
 
   <div id="chatBox" style="display:none;">
     <div id="chat"></div>
-
-    <input id="msg" placeholder="Meddelande">
+    <input id="text" placeholder="Message">
     <button onclick="send()">Send</button>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io();
-    let user = "";
+    let currentUser = "";
 
-    function join() {
-      const name = document.getElementById("username").value;
+    function register() {
+      socket.emit("register", {
+        user: user.value,
+        pass: pass.value
+      }, res => {
+        msg.innerText = res.ok ? "Created!" : res.error;
+      });
+    }
 
-      socket.emit("join", name, (res) => {
+    function login() {
+      socket.emit("login", {
+        user: user.value,
+        pass: pass.value
+      }, res => {
         if (!res.ok) {
-          document.getElementById("error").innerText = res.error;
+          msg.innerText = res.error;
           return;
         }
 
-        user = name;
-        document.getElementById("login").style.display = "none";
+        currentUser = user.value;
+        document.getElementById("auth").style.display = "none";
         document.getElementById("chatBox").style.display = "block";
       });
     }
 
     socket.on("msg", data => {
       document.getElementById("chat").innerHTML +=
-        "<p><b>" + data.name + ":</b> " + data.msg + "</p>";
+        "<p><b>" + data.user + ":</b> " + data.msg + "</p>";
     });
 
     function send() {
-      const msg = document.getElementById("msg").value;
+      const text = document.getElementById("text").value;
 
-      if (!msg) return;
+      if (!text.trim()) return;
 
-      socket.emit("msg", { name: user, msg });
-      document.getElementById("msg").value = "";
+      socket.emit("msg", {
+        user: currentUser,
+        msg: text
+      });
+
+      document.getElementById("text").value = "";
     }
   </script>
   `);
 });
 
-// 👤 LOGIN SYSTEM
+// 🔐 REGISTER + LOGIN
 io.on("connection", (socket) => {
 
-  socket.on("join", (name, cb) => {
-    if (!isValidName(name)) {
-      return cb({ ok: false, error: "Ogiltigt username" });
+  socket.on("register", (data, cb) => {
+    if (!isValidName(data.user)) {
+      return cb({ ok: false, error: "Invalid username" });
     }
 
-    if (users.has(name)) {
-      return cb({ ok: false, error: "Namnet är redan taget" });
+    if (users[data.user]) {
+      return cb({ ok: false, error: "Username exists" });
     }
 
-    users.add(name);
-    socket.username = name;
+    users[data.user] = data.pass;
+    cb({ ok: true });
+  });
+
+  socket.on("login", (data, cb) => {
+    if (!users[data.user]) {
+      return cb({ ok: false, error: "No account" });
+    }
+
+    if (users[data.user] !== data.pass) {
+      return cb({ ok: false, error: "Wrong password" });
+    }
+
+    if (onlineUsers.has(data.user)) {
+      return cb({ ok: false, error: "Already online" });
+    }
+
+    onlineUsers.add(data.user);
+    socket.user = data.user;
 
     cb({ ok: true });
   });
 
-  // 💬 CHAT
   socket.on("msg", (data) => {
-    if (!data.msg || !data.msg.trim()) return;
+    if (!data.msg.trim()) return;
 
     io.emit("msg", data);
   });
@@ -103,5 +132,5 @@ io.on("connection", (socket) => {
 });
 
 http.listen(process.env.PORT || 3000, () =>
-  console.log("Server started")
+  console.log("Server running")
 );
