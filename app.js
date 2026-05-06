@@ -3,15 +3,21 @@ const app = express();
 const http = require("http").createServer(app);
 const io = require("socket.io")(http);
 
+// 👑 OWNER
+const OWNER_NAME = "BLOXZEBBRAZZYT";
+
+// 💾 memory storage
 const users = {};
 const onlineUsers = new Set();
 
+// 🚫 namn-regler
 function isValidName(name) {
   if (!name) return false;
 
   const lower = name.toLowerCase();
 
-  if (name === "BLOXZEBBRAZZYT") return true;
+  // 👑 OWNER bypass
+  if (name === OWNER_NAME) return true;
 
   if (lower.includes("bloxzebbrazz")) return false;
   if (lower.includes("zebbrazz")) return false;
@@ -19,6 +25,7 @@ function isValidName(name) {
   return true;
 }
 
+// 🌐 frontend
 app.get("/", (req, res) => {
   res.send(`
   <h2>Chat App</h2>
@@ -46,25 +53,25 @@ app.get("/", (req, res) => {
     let currentUser = "";
 
     function signup() {
-      const user = document.getElementById("user").value;
-      const pass = document.getElementById("pass").value;
-
-      socket.emit("signup", { user, pass }, (res) => {
-        document.getElementById("msg").innerText = res.message;
+      socket.emit("signup", {
+        user: user.value,
+        pass: pass.value
+      }, res => {
+        msg.innerText = res.message;
       });
     }
 
     function login() {
-      const user = document.getElementById("user").value;
-      const pass = document.getElementById("pass").value;
-
-      socket.emit("login", { user, pass }, (res) => {
+      socket.emit("login", {
+        user: user.value,
+        pass: pass.value
+      }, res => {
         if (!res.ok) {
-          document.getElementById("msg").innerText = res.message;
+          msg.innerText = res.message;
           return;
         }
 
-        currentUser = user;
+        currentUser = user.value;
         document.getElementById("auth").style.display = "none";
         document.getElementById("chatBox").style.display = "block";
       });
@@ -91,9 +98,10 @@ app.get("/", (req, res) => {
   `);
 });
 
-// 🔐 SERVER
+// 🔐 SERVER LOGIC
 io.on("connection", (socket) => {
 
+  // SIGN UP
   socket.on("signup", (data, cb) => {
     if (!isValidName(data.user)) {
       return cb({ ok: false, message: "Invalid username" });
@@ -103,15 +111,12 @@ io.on("connection", (socket) => {
       return cb({ ok: false, message: "Username already exists" });
     }
 
-    if (!data.user || !data.pass) {
-      return cb({ ok: false, message: "Fill in all fields" });
-    }
-
     users[data.user] = data.pass;
 
     return cb({ ok: true, message: "Account created!" });
   });
 
+  // LOGIN
   socket.on("login", (data, cb) => {
     if (!users[data.user]) {
       return cb({ ok: false, message: "Account not found" });
@@ -131,10 +136,14 @@ io.on("connection", (socket) => {
     return cb({ ok: true, message: "Logged in!" });
   });
 
+  // 💬 CHAT
   socket.on("msg", (data) => {
     if (!data.msg || !data.msg.trim()) return;
 
-    io.emit("msg", data);
+    io.emit("msg", {
+      user: data.user === OWNER_NAME ? "👑 " + data.user : data.user,
+      msg: data.msg
+    });
   });
 
 });
