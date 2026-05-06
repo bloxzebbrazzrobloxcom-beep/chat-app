@@ -1,1 +1,8 @@
-
+{
+  "alex": {
+    "password": "1234"
+  },
+  "test": {
+    "password": "test"
+  }
+}
