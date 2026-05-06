@@ -17,24 +17,31 @@ app.get("/", (req, res) => {
     const socket = io();
 
     socket.on("msg", data => {
-      document.getElementById("chat").innerHTML +=
-        "<p><b>" + data.name + ":</b> " + data.msg + "</p>";
+      const div = document.getElementById("chat");
+      div.innerHTML += "<p><b>" + data.name + ":</b> " + data.msg + "</p>";
     });
 
     function send() {
-      socket.emit("msg", {
-        name: document.getElementById("name").value,
-        msg: document.getElementById("msg").value
-      });
+      const name = document.getElementById("name").value;
+      const msg = document.getElementById("msg").value;
+
+      if (!msg) return;
+
+      socket.emit("msg", { name, msg });
+      document.getElementById("msg").value = "";
     }
   </script>
   `);
 });
 
-io.on("connection", socket => {
-  socket.on("msg", data => {
+io.on("connection", (socket) => {
+  console.log("User connected");
+
+  socket.on("msg", (data) => {
     io.emit("msg", data);
   });
 });
 
-http.listen(3000, () => console.log("http://localhost:3000"));
+http.listen(process.env.PORT || 3000, () =>
+  console.log("Server started")
+);
